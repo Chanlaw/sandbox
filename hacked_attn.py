@@ -144,6 +144,7 @@ class AttentionCellWrapper(rnn_cell.RNNCell):
       y = _linear(query, self._attn_vec_size, True)
       y = array_ops.reshape(y, [-1, 1, 1, self._attn_vec_size])
       s = reduce_sum(v * tanh(hidden_features + y), [2, 3])
+      #softmax changed to hard max
       a = tf.one_hot(tf.argmax(s, dimension=0),self._attn_size)
       d = reduce_sum(
         array_ops.reshape(a, [-1, self._attn_length, 1, 1]) * hidden, [1, 2])
