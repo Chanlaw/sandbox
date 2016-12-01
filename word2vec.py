@@ -8,12 +8,10 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or 
-implied.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
-==============================================================================
+# ==============================================================================
 
 """Multi-threaded word2vec mini-batched skip-gram model.
 Trains the model described in:
@@ -412,7 +410,7 @@ self._session.graph)
     config = projector.ProjectorConfig()
     embedding = config.embeddings.add()
     embedding.tensor_name = self._emb.name
-    embedding.metadata_path = os.path.join(, 'metadata.tsv')
+    embedding.metadata_path = os.path.join(opts.save_path, "emb_metadata.tsv")
     projector.visualize_embeddings(summary_writer, config)
 
     workers = []
