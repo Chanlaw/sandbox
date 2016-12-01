@@ -419,8 +419,7 @@ self._session.graph)
       t.start()
       workers.append(t)
 
-    last_words, last_time, last_summary_time = initial_words, 
-time.time(), 0
+    last_words, last_time, last_summary_time = initial_words, time.time(), 0
     last_checkpoint_time = 0
     while True:
       time.sleep(opts.statistics_interval)  # Reports our progress once a while.
