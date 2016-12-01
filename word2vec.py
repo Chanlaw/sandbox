@@ -44,65 +44,54 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.models.embedding import gen_word2vec as word2vec
+from tensorflow.contrib.tensorboard.plugins import projector
 
 flags = tf.app.flags
 
-flags.DEFINE_string("save_path", None, "Directory to write the model and 
-"
+flags.DEFINE_string("save_path", None, "Directory to write the model and "
                     "training summaries.")
 flags.DEFINE_string("train_data", None, "Training text file. "
-                    "E.g., unzipped file 
-http://mattmahoney.net/dc/text8.zip.")
+                    "E.g., unzipped file http://mattmahoney.net/dc/text8.zip.")
 flags.DEFINE_string(
     "eval_data", None, "File consisting of analogies of four tokens."
     "embedding 2 - embedding 1 + embedding 3 should be close "
     "to embedding 4."
     "See README.md for how to get 'questions-words.txt'.")
-flags.DEFINE_integer("embedding_size", 200, "The embedding dimension 
-size.")
+flags.DEFINE_integer("embedding_size", 200, "The embedding dimension size.")
 flags.DEFINE_integer(
-    "epochs_to_train", 15,
-    "Number of epochs to train. Each epoch processes the training data 
-once "
+    "epochs_to_train", 5,
+    "Number of epochs to train. Each epoch processes the training data once "
     "completely.")
 flags.DEFINE_float("learning_rate", 0.2, "Initial learning rate.")
 flags.DEFINE_integer("num_neg_samples", 100,
                      "Negative samples per training example.")
-flags.DEFINE_integer("batch_size", 16,
+flags.DEFINE_integer("batch_size", 64,
                      "Number of training examples processed per step "
                      "(size of a minibatch).")
 flags.DEFINE_integer("concurrent_steps", 12,
                      "The number of concurrent training steps.")
 flags.DEFINE_integer("window_size", 5,
-                     "The number of words to predict to the left and 
-right "
+                     "The number of words to predict to the left and right "
                      "of the target word.")
 flags.DEFINE_integer("min_count", 5,
-                     "The minimum number of word occurrences for it to 
-be "
+                     "The minimum number of word occurrences for it to be "
                      "included in the vocabulary.")
 flags.DEFINE_float("subsample", 1e-3,
-                   "Subsample threshold for word occurrence. Words that 
-appear "
-                   "with higher frequency will be randomly down-sampled. 
-Set "
+                   "Subsample threshold for word occurrence. Words that appear "
+                   "with higher frequency will be randomly down-sampled. Set "
                    "to 0 to disable.")
 flags.DEFINE_boolean(
     "interactive", False,
-    "If true, enters an IPython interactive session to play with the 
-trained "
-    "model. E.g., try model.analogy(b'france', b'paris', b'russia') and 
-"
+    "If true, enters an IPython interactive session to play with the trained "
+    "model. E.g., try model.analogy(b'france', b'paris', b'russia') and "
     "model.nearby([b'proton', b'elephant', b'maxwell'])")
 flags.DEFINE_integer("statistics_interval", 5,
                      "Print statistics every n seconds.")
 flags.DEFINE_integer("summary_interval", 5,
-                     "Save training summary to file every n seconds 
-(rounded "
+                     "Save training summary to file every n seconds (rounded "
                      "up to statistics interval).")
 flags.DEFINE_integer("checkpoint_interval", 600,
-                     "Checkpoint the model (i.e. save the parameters) 
-every n "
+                     "Checkpoint the model (i.e. save the parameters) every n "
                      "seconds (rounded up to statistics interval).")
 
 FLAGS = flags.FLAGS
@@ -137,12 +126,10 @@ class Options(object):
     # Number of examples for one training step.
     self.batch_size = FLAGS.batch_size
 
-    # The number of words to predict to the left and right of the target 
-word.
+    # The number of words to predict to the left and right of the target word.
     self.window_size = FLAGS.window_size
 
-    # The minimum number of word occurrences for it to be included in 
-the
+    # The minimum number of word occurrences for it to be included in the
     # vocabulary.
     self.min_count = FLAGS.min_count
 
@@ -156,8 +143,7 @@ the
     # statistics_interval).
     self.summary_interval = FLAGS.summary_interval
 
-    # How often to write checkpoints (rounds up to the nearest 
-statistics
+    # How often to write checkpoints (rounds up to the nearest statistics
     # interval).
     self.checkpoint_interval = FLAGS.checkpoint_interval
 
@@ -345,8 +331,7 @@ class Word2Vec(object):
     nearby_emb = tf.gather(nemb, nearby_word)
     nearby_dist = tf.matmul(nearby_emb, nemb, transpose_b=True)
     nearby_val, nearby_idx = tf.nn.top_k(nearby_dist,
-                                         min(1000, 
-self._options.vocab_size))
+                                         min(1000, self._options.vocab_size))
 
     # Nodes in the construct graph which are used by training and
     # evaluation to run/feed/fetch.
@@ -396,9 +381,14 @@ words_per_epoch])
     opts = self._options
     with open(os.path.join(opts.save_path, "vocab.txt"), "w") as f:
       for i in xrange(opts.vocab_size):
-        vocab_word = 
-tf.compat.as_text(opts.vocab_words[i]).encode("utf-8")
+        vocab_word = tf.compat.as_text(opts.vocab_words[i]).encode("utf-8")
         f.write("%s %d\n" % (vocab_word,
+                             opts.vocab_counts[i]))
+    with open(os.path.join(opts.save_path, "emb_metadata.tsv"), "w") as f:
+      f.write("Word \t Count\n")
+      for i in xrange(opts.vocab_size):
+        vocab_word = tf.compat.as_text(opts.vocab_words[i]).encode("utf-8")
+        f.write("%s\t %d\n" % (vocab_word,
                              opts.vocab_counts[i]))
 
   def _train_thread_body(self):
@@ -412,12 +402,19 @@ tf.compat.as_text(opts.vocab_words[i]).encode("utf-8")
     """Train the model."""
     opts = self._options
 
-    initial_epoch, initial_words = self._session.run([self._epoch, 
-self._words])
+    initial_epoch, initial_words = self._session.run([self._epoch, self._words])
+
 
     summary_op = tf.merge_all_summaries()
     summary_writer = tf.train.SummaryWriter(opts.save_path, 
 self._session.graph)
+
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = self._emb.name
+    embedding.metadata_path = os.path.join(, 'metadata.tsv')
+    projector.visualize_embeddings(summary_writer, config)
+
     workers = []
     for _ in xrange(opts.concurrent_steps):
       t = threading.Thread(target=self._train_thread_body)
@@ -428,16 +425,14 @@ self._session.graph)
 time.time(), 0
     last_checkpoint_time = 0
     while True:
-      time.sleep(opts.statistics_interval)  # Reports our progress once 
-a while.
+      time.sleep(opts.statistics_interval)  # Reports our progress once a while.
       (epoch, step, loss, words, lr) = self._session.run(
           [self._epoch, self.global_step, self._loss, self._words, 
 self._lr])
       now = time.time()
       last_words, last_time, rate = words, now, (words - last_words) / (
           now - last_time)
-      print("Epoch %4d Step %8d: lr = %5.3f loss = %6.2f words/sec = 
-%8.0f\r" %
+      print("Epoch %4d Step %8d: lr = %5.3f loss = %6.2f words/sec = %8.0f\r" %
             (epoch, step, lr, loss, rate), end="")
       sys.stdout.flush()
       if now - last_summary_time > opts.summary_interval:
